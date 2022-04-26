@@ -1,2 +1,2 @@
 #!/bin/bash
-docker build -t dqlpp-ros .
+docker build --no-cache -t dqlpp-ros -f dqlpp-ros .
