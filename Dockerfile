@@ -20,6 +20,15 @@ RUN . /opt/ros/melodic/setup.sh &&\
 	cd /root/catkin_ws &&\
     catkin_make
 
+RUN mkdir -p /jetson-inference/data/networks &&\
+	cd /jetson-inference/data/networks &&\
+	curl https://nvidia.box.com/shared/static/frgbiqeieaja0o8b0eyb87fjbsqd4zup.gz -L -o "a.gz" &&\
+	curl https://nvidia.box.com/shared/static/ai2sxrp1tg8mk4j0jbrw3vthqjp8x0af.gz -L -o "b.gz" &&\
+	curl https://nvidia.box.com/shared/static/3umpq9yrv3nj3ltiwlooijx5of414gbh.gz -L -o "c.gz" &&\
+	tar -zxvf a.gz &&\
+	tar -zxvf b.gz &&\
+	tar -zxvf c.gz &&\
+	rm -rf *.gz
 
 
 WORKDIR /root/catkin_ws/
