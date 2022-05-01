@@ -1,3 +1,3 @@
 #!/bin/bash
 
-docker build --network="host" -t dqlpp-ros .
+docker -H bishoybot.local  build --network="host" -t dqlpp-ros .
