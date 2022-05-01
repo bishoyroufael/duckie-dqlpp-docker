@@ -7,4 +7,4 @@ echo RUNNING CONTAINER..
 echo USING PORT: $PORT
 
 # docker run --network=host -it -e "ROS_MASTER_URI=http://localhost:$PORT" -e "ROS_HOSTNAME=127.0.0.1" dqlpp-ros:latest 
-sudo docker -H bishoybot.local run -it --gpus all --privileged --net=host dqlpp-ros:latest 
+sudo docker -H bishoybot.local run --rm -it --gpus all --privileged --net=host dqlpp-ros:latest 
