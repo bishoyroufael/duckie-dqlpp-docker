@@ -30,12 +30,12 @@ RUN mkdir -p /jetson-inference/data/networks &&\
 	tar -zxvf c.gz &&\
 	rm -rf *.gz
 
-RUN pip3 install flask
+RUN pip3 install flask easydict
+
 
 WORKDIR /root/catkin_ws/
 COPY test-wheels.sh .
-COPY testimg.png .
-COPY api.py .
+# ADD src .
 
 RUN echo "source /root/catkin_ws/devel/setup.bash" >> ~/.bashrc
 
