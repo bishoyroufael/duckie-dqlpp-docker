@@ -30,8 +30,13 @@ RUN mkdir -p /jetson-inference/data/networks &&\
 	tar -zxvf c.gz &&\
 	rm -rf *.gz
 
-RUN pip3 install flask easydict
+RUN python -m pip install --upgrade pip
 
+RUN apt-get -y install pkg-config libhdf5-100 libhdf5-dev && pip install h5py==2.10.0
+
+RUN apt-get -y install llvm-10* && ln -s /usr/bin/llvm-config-10 /usr/bin/llvm-config
+
+RUN pip install flask easydict tianshou
 
 WORKDIR /root/catkin_ws/
 COPY test-wheels.sh .
