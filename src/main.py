@@ -22,7 +22,7 @@ def test_ddpg():
     env =  DuckieEnv()
     state_shape = env.observation_space.shape or env.observation_space.n
     action_shape = env.action_space.shape or env.action_space.n
-    max_action = env.action_space.high[0]
+    max_action = env.action_space.high
     print(state_shape, action_shape, max_action)
 
     train_envs = DummyVectorEnv(

@@ -7,6 +7,7 @@ from sensor_msgs.msg import Range
 from duckietown_msgs.msg import WheelsCmdStamped
 from std_msgs.msg import Float32MultiArray
 import time
+import torch
 
 class DuckieEnv(gym.Env):
     '''
@@ -24,16 +25,16 @@ class DuckieEnv(gym.Env):
         self.speed_pub = rospy.Publisher(cfg.wheels_topic, WheelsCmdStamped, queue_size=10) 
 
         # Gym environment variables
-        self.min_action = np.array([-0.1], dtype=np.float32) 
-        self.max_action = np.array([0.1], dtype=np.float32) 
+        self.min_action = np.array([0.0, 0.0], dtype=np.float32) 
+        self.max_action = np.array([cfg.max_bot_delta_speed, cfg.max_bot_delta_speed], dtype=np.float32) 
 
         # ToF reading for terminating an episode 
         self.min_tof_dist = np.array([cfg.tof_min_range], dtype=np.float32) # m
         self.max_tof_dist = np.array([cfg.tof_max_range], dtype=np.float32) # m
         self.tof_range = self.min_tof_dist
 
-        self.depth_array_min = np.zeros((cfg.depth_dim*cfg.depth_dim), dtype=np.float32) 
-        self.depth_array_max = np.ones((cfg.depth_dim*cfg.depth_dim), dtype=np.float32) 
+        self.depth_array_min =  np.zeros((cfg.depth_dim * cfg.depth_dim), dtype=np.float32)
+        self.depth_array_max = np.ones((cfg.depth_dim * cfg.depth_dim), dtype=np.float32)
         self.depth_array = self.depth_array_min
 
 
@@ -46,8 +47,8 @@ class DuckieEnv(gym.Env):
             low=self.depth_array_min, high=self.depth_array_max, dtype=np.float32
         )
 
-        print("Sleeping 5 secs for sensors initialization to take place")
-        time.sleep(5)
+        # print("Sleeping 5 secs for sensors initialization to take place")
+        # time.sleep(5)
 
     def tof_callback(self, msg):
         # Clip if below or above limits
@@ -61,11 +62,11 @@ class DuckieEnv(gym.Env):
 
 
     def raw_depth_callback(self, msg):
-        self.depth_array = np.array(msg.data)#.reshape((cfg.depth_dim, cfg.depth_dim))
+        self.depth_array = np.array(msg.data) 
 
 
     def reset(self):
-        self.observation_space = np.array([0.0], dtype=np.float32)
+        self.observation_space = self.depth_array_min 
         self.stop_bot()
         return self.observation_space
 
@@ -73,7 +74,7 @@ class DuckieEnv(gym.Env):
         self.speed_pub.publish(None, 0, 0)
 
     def move(self, action : np.ndarray):
-        self.speed_pub.publish(None, cfg.bot_speed + action[0] , cfg.bot_speed - action[1] )
+        self.speed_pub.publish(None, cfg.bot_speed + action[0] , cfg.bot_speed + action[1] )
 
     def rotate_slowly(self):
         self.speed_pub.publish(None, cfg.rotation_speed, 0)
@@ -89,8 +90,17 @@ class DuckieEnv(gym.Env):
 
         self.stop_bot()
 
+    def is_ready(self):
+        # Check whether ToF readings started to appear
+        if self.tof_range != self.min_tof_dist:
+            return True
+        return False
+
 
     def step(self, action):
+        while True:
+            if self.is_ready():
+                break
 
         terminate = False
         assert self.action_space.contains(action), "[err] action is invalid"
@@ -112,7 +122,7 @@ class DuckieEnv(gym.Env):
             self.stop_bot()
             self.reposition()
 
-        return self.depth_array, reward, terminate, [self.tof_range]
+        return self.depth_array, reward, terminate, {"tof_range": self.tof_range}
 
 
 
@@ -123,9 +133,10 @@ if __name__ == "__main__":
     total_reward = 0
 
 
-    for _ in range(5):
+    for _ in range(3):
         while True:
             action = env.action_space.sample()
+            # print(action)
             obs, reward, done, info = env.step(action)
             total_reward = total_reward + reward
             if done:
