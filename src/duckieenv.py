@@ -7,7 +7,9 @@ from sensor_msgs.msg import Range
 from duckietown_msgs.msg import WheelsCmdStamped
 from std_msgs.msg import Float32MultiArray
 import time
-import torch
+from math import ceil
+from skimage.measure import block_reduce
+import mmap
 
 class DuckieEnv(gym.Env):
     '''
@@ -21,30 +23,31 @@ class DuckieEnv(gym.Env):
         rospy.set_param(cfg.camera_param_res[1], cfg.camera_height) # height
         rospy.init_node('rl_obs', anonymous=True)
         rospy.Subscriber(cfg.tof_topic, Range, self.tof_callback)
-        rospy.Subscriber(cfg.raw_depth_topic, Float32MultiArray , self.raw_depth_callback)
+        self.mm = np.memmap('raw_d_mm', dtype=np.float16, mode='r+', shape=(cfg.depth_dim,cfg.depth_dim))
         self.speed_pub = rospy.Publisher(cfg.wheels_topic, WheelsCmdStamped, queue_size=10) 
 
         # Gym environment variables
-        self.min_action = np.array([0.0, 0.0], dtype=np.float32) 
-        self.max_action = np.array([cfg.max_bot_delta_speed, cfg.max_bot_delta_speed], dtype=np.float32) 
+        self.min_action = np.array([-cfg.max_bot_delta_speed], dtype=np.float16) 
+        self.max_action = np.array([cfg.max_bot_delta_speed], dtype=np.float16) 
 
         # ToF reading for terminating an episode 
-        self.min_tof_dist = np.array([cfg.tof_min_range], dtype=np.float32) # m
-        self.max_tof_dist = np.array([cfg.tof_max_range], dtype=np.float32) # m
+        self.min_tof_dist = np.array([cfg.tof_min_range], dtype=np.float16) # m
+        self.max_tof_dist = np.array([cfg.tof_max_range], dtype=np.float16) # m
         self.tof_range = self.min_tof_dist
 
-        self.depth_array_min =  np.zeros((cfg.depth_dim * cfg.depth_dim), dtype=np.float32)
-        self.depth_array_max = np.ones((cfg.depth_dim * cfg.depth_dim), dtype=np.float32)
+        self.depth_block_dim = ceil(cfg.depth_dim / cfg.block_size) 
+        self.depth_array_min =  np.zeros((self.depth_block_dim , self.depth_block_dim), dtype=np.float16)
+        self.depth_array_max = np.ones((self.depth_block_dim , self.depth_block_dim), dtype=np.float16)
         self.depth_array = self.depth_array_min
 
 
         # Action is rotation
         self.action_space = spaces.Box(
-            low=self.min_action, high=self.max_action, dtype=np.float32
+            low=self.min_action, high=self.max_action, dtype=np.float16
         )
 
         self.observation_space = spaces.Box(
-            low=self.depth_array_min, high=self.depth_array_max, dtype=np.float32
+            low=self.depth_array_min, high=self.depth_array_max, dtype=np.float16
         )
 
         # print("Sleeping 5 secs for sensors initialization to take place")
@@ -58,26 +61,25 @@ class DuckieEnv(gym.Env):
             range = 1.2
         else:
             range = msg.range 
-        self.tof_range = np.array([range], dtype=np.float32)
+        self.tof_range = np.array([range], dtype=np.float16)
 
 
-    def raw_depth_callback(self, msg):
-        self.depth_array = np.array(msg.data) 
-
+    def get_depth_block(self):
+        block_reduced = block_reduce(self.mm, (cfg.block_size, cfg.block_size)) # Size : ceil(cfg.depth_dim / cfg.block_size)
+        self.depth_array =  (block_reduced - np.min(block_reduced, axis=0)) / np.ptp(block_reduced, axis=0) 
 
     def reset(self):
-        self.observation_space = self.depth_array_min 
         self.stop_bot()
-        return self.observation_space
+        return self.depth_array_min
 
     def stop_bot(self):
         self.speed_pub.publish(None, 0, 0)
 
     def move(self, action : np.ndarray):
-        self.speed_pub.publish(None, cfg.bot_speed + action[0] , cfg.bot_speed + action[1] )
+        self.speed_pub.publish(None, cfg.bot_speed + action[0] , cfg.bot_speed - action[0] )
 
     def rotate_slowly(self):
-        self.speed_pub.publish(None, cfg.rotation_speed, 0)
+        self.speed_pub.publish(None, cfg.rotation_speed, -cfg.rotation_speed)
 
     def reposition(self):
         # Go Backward until it's safe to rotate
@@ -103,47 +105,51 @@ class DuckieEnv(gym.Env):
                 break
 
         terminate = False
-        assert self.action_space.contains(action), "[err] action is invalid"
-
+        assert self.action_space.contains(list(action)), "[err] action is invalid"
+    
         reward = 1
 
         # Encourge straight motion
-        if action[0] == 0 and action[1] == 0:
-            reward = reward + 0.2
+        if action[0] == 0:
+            reward = reward + 0.5
+
+        if action[0] >= cfg.max_bot_delta_speed * cfg.discourage_rate:
+            reward = reward - 0.5 
 
         self.move(action)
 
         # 0 <= mean <= 1
         # print(f"Depth array mean: {np.mean(self.depth_array)}")
 
-        if self.tof_range <= cfg.tof_min_range_threshold:
+        if  self.tof_range <= cfg.tof_min_range_threshold:
             terminate = True
-            reward = -100
+            reward = reward - 100
             self.stop_bot()
             self.reposition()
 
+        self.get_depth_block() # Get depth observation (updates self.depth_array)
         return self.depth_array, reward, terminate, {"tof_range": self.tof_range}
 
 
 
 # Test Environment
-if __name__ == "__main__":
-    env = DuckieEnv()
-    observation = env.reset()
-    total_reward = 0
+# if __name__ == "__main__":
+#     env = DuckieEnv()
+#     observation = env.reset()
+#     total_reward = 0
 
+#     for _ in range(3):
+#         while True:
+#             action = env.action_space.sample()
+#             # print(action)
+#             obs, reward, done, info = env.step(action)
+#             print(obs.var())
+#             total_reward = total_reward + reward
+#             if done:
+#                 break
 
-    for _ in range(3):
-        while True:
-            action = env.action_space.sample()
-            # print(action)
-            obs, reward, done, info = env.step(action)
-            total_reward = total_reward + reward
-            if done:
-                break
-
-        print(f"total_reward in eps {_} : {total_reward} ")
-        total_reward = 0
+#         print(f"total_reward in eps {_} : {total_reward} ")
+#         total_reward = 0
 
 
 

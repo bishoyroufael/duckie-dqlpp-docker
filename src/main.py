@@ -6,7 +6,6 @@ from config import cfg, BOT_NAME
 import numpy as np
 import torch
 from torch.utils.tensorboard import SummaryWriter
-
 from tianshou.data import Collector, VectorReplayBuffer
 from tianshou.env import DummyVectorEnv
 from tianshou.exploration import GaussianNoise
@@ -18,11 +17,11 @@ from tianshou.utils.net.continuous import Actor, Critic
 
 
 
-def test_ddpg():
+def run_ddpg():
     env =  DuckieEnv()
     state_shape = env.observation_space.shape or env.observation_space.n
     action_shape = env.action_space.shape or env.action_space.n
-    max_action = env.action_space.high
+    max_action = env.action_space.high[0]
     print(state_shape, action_shape, max_action)
 
     train_envs = DummyVectorEnv(
@@ -116,5 +115,6 @@ def test_ddpg():
 
 
 if __name__ == '__main__':
-    test_ddpg()
+    run_ddpg()
+
 

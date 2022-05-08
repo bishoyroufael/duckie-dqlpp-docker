@@ -28,7 +28,7 @@ class ApiUtils:
 # There should be ONE instance of that class in the main script!
 class NvidiaUtils:
     def __init__(self):
-        self.args = {"depth_size" : 1.0, "visualize": "depth"}
+        self.args = {"depth_size" : 0.5, "visualize": "depth"}
         self.buffers = depthBuffers( Namespace(**self.args) )
 
         # load mono depth network

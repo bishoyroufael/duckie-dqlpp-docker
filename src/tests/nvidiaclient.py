@@ -4,14 +4,8 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import cfg
 import numpy as np
-import rospy
-from std_msgs.msg import Float32MultiArray
 
+f = np.memmap('raw_d_mm', dtype=np.float16, mode='r+', shape=(cfg.depth_dim, cfg.depth_dim))
 
-def _callback(msg):
-	print(f"depth variance: {np.array(msg.data).reshape((cfg.depth_dim, cfg.depth_dim)).var()}")
-
-
-rospy.init_node('test', anonymous= True)
-rospy.Subscriber('/raw_depth', Float32MultiArray, _callback)
-rospy.spin()
+while True:
+	print(f.var())
