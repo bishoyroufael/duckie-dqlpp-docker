@@ -38,6 +38,15 @@ RUN apt-get -y install llvm-10* && ln -s /usr/bin/llvm-config-10 /usr/bin/llvm-c
 
 RUN pip install flask easydict tianshou
 
+RUN apt-get -y install python3-sklearn libaec-dev libblosc-dev libffi-dev libbrotli-dev libboost-all-dev libbz2-dev &&\
+	apt-get -y install libgif-dev libopenjp2-7-dev liblcms2-dev libjpeg-dev libjxr-dev liblz4-dev liblzma-dev libpng-dev libsnappy-dev libwebp-dev libzopfli-dev libzstd-dev
+
+ENV LC_CTYPE en_US.UTF-8
+ENV LANG en_US.UTF-8
+
+RUN pip3 install scikit-image
+
+
 WORKDIR /root/catkin_ws/
 COPY test-wheels.sh .
 # ADD src .

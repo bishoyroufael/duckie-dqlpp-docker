@@ -8,4 +8,4 @@ import numpy as np
 f = np.memmap('raw_d_mm', dtype=np.float16, mode='r+', shape=(cfg.depth_dim, cfg.depth_dim))
 
 while True:
-	print(f.var())
+	print(f)

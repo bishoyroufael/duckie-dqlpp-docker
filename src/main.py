@@ -1,82 +1,70 @@
 import argparse
 import os
 import pprint
-from duckieenv import DuckieEnv
-from config import cfg, BOT_NAME
 import numpy as np
 import torch
 from torch.utils.tensorboard import SummaryWriter
 from tianshou.data import Collector, VectorReplayBuffer
 from tianshou.env import DummyVectorEnv
-from tianshou.exploration import GaussianNoise
-from tianshou.policy import DDPGPolicy
+from tianshou.policy import DQNPolicy
 from tianshou.trainer import offpolicy_trainer
 from tianshou.utils import TensorboardLogger
 from tianshou.utils.net.common import Net
-from tianshou.utils.net.continuous import Actor, Critic
+from duckieenv import DuckieEnv
+from config import cfg, BOT_NAME
+import pickle
 
-
-
-def run_ddpg():
-    env =  DuckieEnv()
+def run_dqn():
+    env = DuckieEnv() 
     state_shape = env.observation_space.shape or env.observation_space.n
     action_shape = env.action_space.shape or env.action_space.n
-    max_action = env.action_space.high[0]
-    print(state_shape, action_shape, max_action)
+
 
     train_envs = DummyVectorEnv(
-        [lambda: DuckieEnv() for _ in range(cfg.training.training_num)]
+        [lambda: DuckieEnv() for _ in range(cfg.training.dqn.training_num)]
     )
-    # test_envs = gym.make(cfg.trainingtask)
     test_envs = DummyVectorEnv(
-        [lambda: DuckieEnv() for _ in range(cfg.training.test_num)]
+        [lambda: DuckieEnv() for _ in range(cfg.training.dqn.test_num)]
     )
     # seed
-    np.random.seed(cfg.training.seed)
-    torch.manual_seed(cfg.training.seed)
-    train_envs.seed(cfg.training.seed)
-    test_envs.seed(cfg.training.seed)
-
-    print("Getting Model")
+    np.random.seed(cfg.training.dqn.seed)
+    torch.manual_seed(cfg.training.dqn.seed)
+    train_envs.seed(cfg.training.dqn.seed)
+    test_envs.seed(cfg.training.dqn.seed)
+    # Q_param = V_param = {"hidden_sizes": [128]}
     # model
-    net = Net(state_shape, hidden_sizes=cfg.training.hidden_sizes, device=cfg.training.device)
-    actor = Actor(
-        net, action_shape, max_action=max_action, device=cfg.training.device
-    ).to(cfg.training.device)
-    actor_optim = torch.optim.Adam(actor.parameters(), lr=cfg.training.actor_lr)
+
+    print("[info] Building DQN Model")
     net = Net(
         state_shape,
         action_shape,
-        hidden_sizes=cfg.training.hidden_sizes,
-        concat=True,
-        device=cfg.training.device
-    )
-    critic = Critic(net, device=cfg.training.device).to(cfg.training.device)
-    critic_optim = torch.optim.Adam(critic.parameters(), lr=cfg.training.critic_lr)
+        hidden_sizes=cfg.training.dqn.hidden_sizes,
+        device=cfg.training.dqn.device,
+    ).to(cfg.training.dqn.device)
 
-    print("Models loaded")
-    policy = DDPGPolicy(
-        actor,
-        actor_optim,
-        critic,
-        critic_optim,
-        tau=cfg.training.tau,
-        gamma=cfg.training.gamma,
-        exploration_noise=GaussianNoise(sigma=cfg.training.exploration_noise),
-        reward_normalization=cfg.training.rew_norm,
-        estimation_step=cfg.training.n_step,
-        action_space=env.action_space
+    optim = torch.optim.Adam(net.parameters(), lr=cfg.training.dqn.lr)
+
+    policy = DQNPolicy(
+        net,
+        optim,
+        cfg.training.dqn.gamma,
+        cfg.training.dqn.n_step,
+        target_update_freq=cfg.training.dqn.target_update_freq,
     )
+    # buffer
+    buf = VectorReplayBuffer(cfg.training.dqn.buffer_size, buffer_num=len(train_envs))
+
+
     # collector
-    train_collector = Collector(
-        policy,
-        train_envs,
-        VectorReplayBuffer(cfg.training.buffer_size, len(train_envs)),
-        exploration_noise=True
-    )
-    test_collector = Collector(policy, test_envs)
+    train_collector = Collector(policy, train_envs, buf, exploration_noise=True)
+    test_collector = Collector(policy, test_envs, exploration_noise=True)
+    
+    # policy.set_eps(1)
+    train_collector.collect(n_step=cfg.training.dqn.batch_size * cfg.training.dqn.training_num)
+    
+    
     # log
-    log_path = os.path.join(cfg.training.logdir, BOT_NAME, 'ddpg')
+    log_path = os.path.join(cfg.training.dqn.logdir, BOT_NAME , 'dqn')
     writer = SummaryWriter(log_path)
     logger = TensorboardLogger(writer)
 
@@ -84,37 +72,92 @@ def run_ddpg():
         torch.save(policy.state_dict(), os.path.join(log_path, 'policy.pth'))
 
     def stop_fn(mean_rewards):
-        return mean_rewards >= cfg.training.reward_threshold
+        return mean_rewards >= cfg.training.dqn.reward_threshold
+
+    def train_fn(epoch, env_step):
+        # eps annnealing, just a demo
+        if env_step <= 10000:
+            policy.set_eps(cfg.training.dqn.eps_train)
+        elif env_step <= 50000:
+            eps = cfg.training.dqn.eps_train - (env_step - 10000) / \
+                40000 * (0.9 * cfg.training.dqn.eps_train)
+            policy.set_eps(eps)
+        else:
+            policy.set_eps(0.1 * cfg.training.dqn.eps_train)
+
+    def test_fn(epoch, env_step):
+        policy.set_eps(cfg.training.dqn.eps_test)
+
+
+    # Resumable Training 
+    # https://github.com/thu-ml/tianshou/blob/master/test/discrete/test_c51.py
+    def save_checkpoint_fn(epoch, env_step, gradient_step):
+        # see also: https://pytorch.org/tutorials/beginner/saving_loading_models.html
+        torch.save(
+            {
+                'model': policy.state_dict(),
+                'optim': optim.state_dict(),
+            }, os.path.join(log_path, 'checkpoint.pth')
+        )
+        pickle.dump(
+            train_collector.buffer,
+            open(os.path.join(log_path, 'train_buffer.pkl'), "wb")
+        )
+
+    if cfg.training.dqn.resume:
+        # load from existing checkpoint
+        print(f"Loading agent under {log_path}")
+        ckpt_path = os.path.join(log_path, 'policy.pth')
+        if os.path.exists(ckpt_path):
+            checkpoint = torch.load(ckpt_path, map_location=cfg.training.device)
+            policy.load_state_dict(checkpoint['model'])
+            policy.optim.load_state_dict(checkpoint['optim'])
+            print("Successfully restore policy and optim.")
+        else:
+            print("Fail to restore policy and optim.")
+        buffer_path = os.path.join(log_path, 'train_buffer.pkl')
+        if os.path.exists(buffer_path):
+            train_collector.buffer = pickle.load(open(buffer_path, "rb"))
+            print("Successfully restore buffer.")
+        else:
+            print("Fail to restore buffer.")
+
+
+    print("[info] Done!")
 
     # trainer
     result = offpolicy_trainer(
         policy,
         train_collector,
         test_collector,
-        cfg.training.epoch,
-        cfg.training.step_per_epoch,
-        cfg.training.step_per_collect,
-        cfg.training.test_num,
-        cfg.training.batch_size,
-        update_per_step=cfg.training.update_per_step,
+        cfg.training.dqn.epoch,
+        cfg.training.dqn.step_per_epoch,
+        cfg.training.dqn.step_per_collect,
+        cfg.training.dqn.test_num,
+        cfg.training.dqn.batch_size,
+        update_per_step=cfg.training.dqn.update_per_step,
+        train_fn=train_fn,
+        test_fn=test_fn,
         stop_fn=stop_fn,
         save_best_fn=save_best_fn,
-        logger=logger
+        logger=logger,
+        save_checkpoint_fn = save_checkpoint_fn
     )
-    assert stop_fn(result['best_reward'])
+
+    if not stop_fn(result['best_reward']):
+        print("[warn] Best reward wasn't achieved yet!")
 
     if __name__ == '__main__':
         pprint.pprint(result)
         # Let's watch its performance!
-        env = DuckieEnv()
+        env = DuckieEnv() 
         policy.eval()
+        policy.set_eps(cfg.training.dqn.eps_test)
         collector = Collector(policy, env)
-        result = collector.collect(n_episode=1)
+        result = collector.collect(n_episode=1, render=0.)
         rews, lens = result["rews"], result["lens"]
         print(f"Final reward: {rews.mean()}, length: {lens.mean()}")
 
 
 if __name__ == '__main__':
-    run_ddpg()
-
-
+    run_dqn()
