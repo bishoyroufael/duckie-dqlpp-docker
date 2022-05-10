@@ -36,7 +36,7 @@ cfg = edict({
             'step_per_collect' : 10,
             'update_per_step' : 0.125,
             'batch_size' : 64,
-            'hidden_sizes' : [64, 64],
+            'hidden_sizes' : [128, 128, 128, 128],
             'training_num' : 10,
             'test_num' : 3,
             'logdir' : 'log',

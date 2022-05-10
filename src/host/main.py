@@ -42,6 +42,7 @@ def run_dqn():
         device=cfg.training.dqn.device,
     ).to(cfg.training.dqn.device)
 
+    print("\t [info] Net Done!")
     optim = torch.optim.Adam(net.parameters(), lr=cfg.training.dqn.lr)
 
     policy = DQNPolicy(
@@ -55,13 +56,19 @@ def run_dqn():
     buf = VectorReplayBuffer(cfg.training.dqn.buffer_size, buffer_num=len(train_envs))
 
 
+    print("[info] Collectors building!")
     # collector
     train_collector = Collector(policy, train_envs, buf, exploration_noise=True)
     test_collector = Collector(policy, test_envs, exploration_noise=True)
     
+    print("\t [info] Collectors done!")
+
+    print("[info] Collecting ..")
+
     # policy.set_eps(1)
     train_collector.collect(n_step=cfg.training.dqn.batch_size * cfg.training.dqn.training_num)
     
+    print("\t [info] Collecting done!")
     
     # log
     log_path = os.path.join(cfg.training.dqn.logdir, BOT_NAME , 'dqn')
@@ -123,7 +130,7 @@ def run_dqn():
             print("Fail to restore buffer.")
 
 
-    print("[info] Done!")
+    print("[info] Training will start!")
 
     # trainer
     result = offpolicy_trainer(
