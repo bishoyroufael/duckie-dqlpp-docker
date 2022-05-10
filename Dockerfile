@@ -46,6 +46,8 @@ ENV LANG en_US.UTF-8
 
 RUN pip3 install scikit-image
 
+RUN apt-get install psmisc && pip install -U pyopenssl 
+
 
 WORKDIR /root/catkin_ws/
 COPY test-wheels.sh .

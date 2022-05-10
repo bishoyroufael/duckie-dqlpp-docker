@@ -28,7 +28,7 @@ class ApiUtils:
 # There should be ONE instance of that class in the main script!
 class NvidiaUtils:
     def __init__(self):
-        self.args = {"depth_size" : 0.5, "visualize": "depth"}
+        self.args = {"depth_size" : 1.0, "visualize": "depth"}
         self.buffers = depthBuffers( Namespace(**self.args) )
 
         # load mono depth network
@@ -42,7 +42,7 @@ class NvidiaUtils:
         # this mapping is persistent, so you only need to do it once
         self.depth_numpy = jetson.utils.cudaToNumpy(self.depth_field)
 
-        print(f"depth field resolution is {self.depth_field.width}x{self.depth_field.height}")
+        print(f"[info] Depth field resolution is {self.depth_field.width}x{self.depth_field.height}")
 
     def get_depth_field_dims(self):
         return (self.depth_field.width, self.depth_field.height)
