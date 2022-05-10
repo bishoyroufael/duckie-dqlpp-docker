@@ -114,9 +114,9 @@ def run_dqn():
     if cfg.training.dqn.resume:
         # load from existing checkpoint
         print(f"Loading agent under {log_path}")
-        ckpt_path = os.path.join(log_path, 'policy.pth')
+        ckpt_path = os.path.join(log_path, 'checkpoint.pth')
         if os.path.exists(ckpt_path):
-            checkpoint = torch.load(ckpt_path, map_location=cfg.training.device)
+            checkpoint = torch.load(ckpt_path, map_location=cfg.training.dqn.device)
             policy.load_state_dict(checkpoint['model'])
             policy.optim.load_state_dict(checkpoint['optim'])
             print("Successfully restore policy and optim.")

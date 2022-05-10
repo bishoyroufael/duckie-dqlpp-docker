@@ -18,7 +18,7 @@ cfg = edict({
     'tof_max_range': 1.0,
     'tof_min_range_threshold' : 0.20,
     'depth_dim' : 224,
-    'block_size': 5,
+    'block_size': 1,
     'num_discrete_actions' : 5, # should always be odd!
     'training': {
         'dqn': {
@@ -43,7 +43,7 @@ cfg = edict({
             'alpha' : 0.6,
             'beta' : 0.4,
             'device' : 'cuda',
-            'resume' : False
+            'resume' : True
         }
     }
 }) 
