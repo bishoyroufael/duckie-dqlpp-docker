@@ -14,14 +14,10 @@ import mmap
 
 nvidia_utils = NvidiaUtils()
 
-f = np.memmap('raw_d_mm', dtype=np.float16, mode='w+', shape=(cfg.depth_dim, cfg.depth_dim))
+f = np.memmap('raw_d_mm', dtype=cfg.dtype, mode='w+', shape=(cfg.depth_dim, cfg.depth_dim))
 def _callback(msg):
-
 	depth_array = nvidia_utils.compute_depth_array(ImgUtils.rosimg_to_opencv(msg.data))
-	# depth_array_normalized = (depth_array - np.min(depth_array, axis=0)) / np.ptp(depth_array, axis=0) 
-
-	# print(depth_array_normalized.var())
-	f[:] = depth_array.squeeze().astype(np.float16)[:]
+	f[:] = depth_array.squeeze().astype(cfg.dtype)[:]
 
 rospy.init_node('nvidia_node', anonymous = True)
 rospy.Subscriber(cfg.camera_topic, CompressedImage, _callback)

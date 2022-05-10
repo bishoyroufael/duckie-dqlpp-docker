@@ -12,14 +12,14 @@ import io
 class DumpEnv(gym.Env):
     def __init__(self):
         self.depth_block_dim = ceil(cfg.depth_dim / cfg.block_size) 
-        self.depth_array_min =  np.zeros((self.depth_block_dim, self.depth_block_dim), dtype=np.float16)
-        self.depth_array_max = np.ones((self.depth_block_dim, self.depth_block_dim), dtype=np.float16)
+        self.depth_array_min =  np.zeros((self.depth_block_dim, self.depth_block_dim), dtype=cfg.dtype)
+        self.depth_array_max = np.ones((self.depth_block_dim, self.depth_block_dim), dtype=cfg.dtype)
         self.depth_array = self.depth_array_min
 
         self.action_space = spaces.Discrete(cfg.num_discrete_actions)
 
         self.observation_space = spaces.Box(
-            low=self.depth_array_min, high=self.depth_array_max, dtype=np.float16
+            low=self.depth_array_min, high=self.depth_array_max, dtype=cfg.dtype
         )
 
         self.headers = requests.utils.default_headers()

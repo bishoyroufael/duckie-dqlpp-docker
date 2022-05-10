@@ -7,8 +7,8 @@ cfg = edict({
     'tof_topic' : f"/{BOT_NAME}/front_center_tof_driver_node/range",
     'raw_depth_topic': '/raw_depth',
     'camera_param_res' : [f"/{BOT_NAME}/camera_node/res_w", f"/{BOT_NAME}/camera_node/res_h"],
-    'camera_width': 320,
-    'camera_height': 240,
+    'camera_width': 640,
+    'camera_height': 480,
     'bot_speed': 0.3,
     'max_bot_delta_speed' : 0.25,
     'discourage_rate' : 0.70,
@@ -18,8 +18,9 @@ cfg = edict({
     'tof_max_range': 1.0,
     'tof_min_range_threshold' : 0.20,
     'depth_dim' : 224,
-    'block_size': 5,
+    'block_size': 1,
     'num_discrete_actions' : 5, # should always be odd!
+    'dtype' : 'float32',
     'training': {
         'dqn': {
             'reward_threshold' : 30000,

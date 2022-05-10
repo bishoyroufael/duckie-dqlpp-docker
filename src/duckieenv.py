@@ -11,6 +11,7 @@ from math import ceil
 from skimage.measure import block_reduce
 from scipy import stats
 
+
 class DuckieEnv(gym.Env):
     '''
         Action space : +ve delta velocities of the 2 wheels in duckiebot. (i.e robot always moving forward) 
@@ -24,7 +25,7 @@ class DuckieEnv(gym.Env):
         rospy.init_node('rl_obs', anonymous=True)
         rospy.Subscriber(cfg.tof_topic, Range, self.tof_callback)
         try:
-            self.mm = np.memmap('raw_d_mm', dtype=np.float16, mode='r+', shape=(cfg.depth_dim,cfg.depth_dim))
+            self.mm = np.memmap('raw_d_mm', dtype=cfg.dtype, mode='r+', shape=(cfg.depth_dim,cfg.depth_dim))
         except FileNotFoundError:
             print("[warn] memory mapped file not found for depth estimation, please execute run_nvidia_mm.sh and try again!")
             exit(-1)
@@ -33,19 +34,19 @@ class DuckieEnv(gym.Env):
 
 
         # ToF reading for terminating an episode 
-        self.min_tof_dist = np.array([cfg.tof_min_range], dtype=np.float16) # m
-        self.max_tof_dist = np.array([cfg.tof_max_range], dtype=np.float16) # m
+        self.min_tof_dist = np.array([cfg.tof_min_range], dtype=cfg.dtype) # m
+        self.max_tof_dist = np.array([cfg.tof_max_range], dtype=cfg.dtype) # m
         self.tof_range = self.min_tof_dist
 
         self.depth_block_dim = ceil(cfg.depth_dim / cfg.block_size) 
-        self.depth_array_min =  np.zeros((self.depth_block_dim, self.depth_block_dim), dtype=np.float16)
-        self.depth_array_max = np.ones((self.depth_block_dim, self.depth_block_dim), dtype=np.float16)
+        self.depth_array_min =  np.zeros((self.depth_block_dim, self.depth_block_dim), dtype=cfg.dtype)
+        self.depth_array_max = np.ones((self.depth_block_dim, self.depth_block_dim), dtype=cfg.dtype)
         self.depth_array = self.depth_array_min
 
         self.action_space = spaces.Discrete(cfg.num_discrete_actions)
 
         self.observation_space = spaces.Box(
-            low=self.depth_array_min, high=self.depth_array_max, dtype=np.float16
+            low=self.depth_array_min, high=self.depth_array_max, dtype=cfg.dtype
         )
 
 
@@ -57,14 +58,15 @@ class DuckieEnv(gym.Env):
             range = cfg.tof_max_range
         else:
             range = msg.range 
-        self.tof_range = np.array([range], dtype=np.float16)
+        self.tof_range = np.array([range], dtype=cfg.dtype)
 
 
     def update_observation(self):
-        block_reduced = block_reduce(self.mm, (cfg.block_size, cfg.block_size)) # Size : ceil(cfg.depth_dim / cfg.block_size)
-        self.depth_array =  (block_reduced- np.min(block_reduced, axis=0)) / np.ptp(block_reduced, axis=0) 
-        # dstats = stats.describe(self.depth_array, axis=None)
-        # self.depth_array = np.array([self.tof_range], dtype=np.float16)
+
+        # block_reduced = block_reduce(self.mm, (cfg.block_size, cfg.block_size)) # Size : ceil(cfg.depth_dim / cfg.block_size)
+        # self.depth_array =  (block_reduced- np.min(block_reduced, axis=0)) / np.ptp(block_reduced, axis=0) 
+        
+        self.depth_array = self.mm
 
     def reset(self):
         self.stop_bot()
@@ -113,6 +115,11 @@ class DuckieEnv(gym.Env):
             if self.is_ready():
                 break
 
+        # to visualize depth without taking any action
+        if (action == -1): 
+            self.update_observation()
+            return self.depth_array, 0, 0, {'tof_range': self.tof_range}
+
         terminate = False
         assert self.action_space.contains(action), "[err] action is invalid"
     
@@ -120,10 +127,10 @@ class DuckieEnv(gym.Env):
 
         # Encourge straight motion
         if action == 0:
-            reward = reward + 0.5
+            reward = reward + 1
         # Discourage extreme rotation
         elif (action == self.action_space.n - 1) or (action == self.action_space.n // 2):
-            reward = reward - 0.2
+            reward = reward - 0.9
 
         # if action[0] >= cfg.max_bot_delta_speed * cfg.discourage_rate:
         #     reward = reward - 0.5 
@@ -135,7 +142,7 @@ class DuckieEnv(gym.Env):
 
         if  self.tof_range <= cfg.tof_min_range_threshold:
             terminate = True
-            reward = reward - 100
+            reward = -100 
             self.stop_bot()
             self.reposition()
 
@@ -145,23 +152,22 @@ class DuckieEnv(gym.Env):
 
 
 # Test Environment
-if __name__ == "__main__":
-    env = DuckieEnv()
-    observation = env.reset()
-    total_reward = 0
+# if __name__ == "__main__":
+#     env = DuckieEnv()
+#     observation = env.reset()
+#     total_reward = 0
+#     for _ in range(1):
+#         while True:
+#             action = env.action_space.sample()
+#             # print(action)
+#             obs, reward, done, info = env.step(4)
+#             # print(obs.var())
+#             total_reward = total_reward + reward
+#             if done:
+#                 break
 
-    for _ in range(3):
-        while True:
-            action = env.action_space.sample()
-            # print(action)
-            obs, reward, done, info = env.step(action)
-            # print(obs.var())
-            total_reward = total_reward + reward
-            if done:
-                break
-
-        print(f"total_reward in eps {_} : {total_reward} ")
-        total_reward = 0
+#         print(f"total_reward in eps {_} : {total_reward} ")
+#         total_reward = 0
 
 
 
